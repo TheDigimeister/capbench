@@ -20,13 +20,38 @@ class SelfHosted:
     t0: float = 0.012          # decode s/token with one active sequence
     alpha: float = 1.5         # tpot(n) = t0 * (1 + alpha * n / slots)
     hourly_cost: float = 2.0   # $/replica-hour, ASSUMPTION; sunk: reported, never budgeted
+    # Contention model (v0.3; all off = the v1 model). With serial_prefill, each replica has
+    # one FIFO prefill server that is busy b * ptok per request (prefills are batched, so `a`
+    # adds latency only); decode slows by (1 + beta) while that server is busy, and every
+    # decode step costs kappa extra seconds per 1,000 tokens of context held by decoding
+    # sequences.
+    serial_prefill: bool = False
+    kappa: float = 0.0         # s per decode step per 1k context tokens
+    beta: float = 0.0          # decode slowdown while prefilling
     kind: str = field(default="self", init=False)
 
-    def tpot(self, n):
-        return self.t0 * (1.0 + self.alpha * n / self.slots)
+    def tpot(self, n, ctx=0.0, prefilling=False):
+        t = self.t0 * (1.0 + self.alpha * n / self.slots) + self.kappa * ctx / 1000.0
+        return t * (1.0 + self.beta) if prefilling else t
 
     def prefill(self, ptok):
         return self.a + self.b * ptok
+
+    def saturated(self, ptok, ctok):
+        """(requests/s, s per decode token) one replica sustains with every slot busy,
+        for mean prompt/output lengths. v1 model: slots / (prefill + ctok * tpot(slots)).
+        Contention model: fixed point in the prefill server's utilisation u, capped by
+        the prefill server itself (1 / (b * ptok))."""
+        if not self.serial_prefill:
+            t = self.tpot(self.slots)
+            return self.slots / (self.prefill(ptok) + ctok * t), t
+        ctx = self.slots * (ptok + 0.5 * ctok)
+        lam, cap = 0.0, 1.0 / (self.b * ptok)
+        for _ in range(100):
+            u = min(lam * self.b * ptok, 1.0)
+            t = self.tpot(self.slots, ctx) * (1.0 + self.beta * u)
+            lam = min(self.slots / (self.prefill(ptok) + ctok * t), cap)
+        return lam, t
 
 
 @dataclass(frozen=True)
@@ -57,6 +82,10 @@ HARDWARE = {
     # caching: measured with `capbench.calibrate fit` on 2026-10-03. Median TPOT 71.3 / 67.7 /
     # 71.5 / 85.5 / 90.0 / 95.4 ms at concurrency 1 / 4 / 16 / 32 / 48 / 64.
     "spark_vllm": dict(a=0.1347, b=2.63e-4, t0=0.0713, alpha=0.4),
+    # Same server, contention model fitted to a 9-experiment closed-loop sweep on 2026-10-03
+    # (`capbench.calibrate fit`; raw rows in outputs/calibration/measure_fit.csv).
+    "spark_v2": dict(a=0.0475, b=2.718e-4, t0=0.0682, alpha=0.0, kappa=7.006e-4, beta=5.0,
+                     serial_prefill=True),
 }
 
 # ---------------------------------------------------------------- API tiers

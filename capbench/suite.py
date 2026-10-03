@@ -35,6 +35,29 @@ SUITES = {
             {"hardware": "spark", "arrivals": "burstgpt"},
         ],
     },
+    # v2: only hardware whose simulator profile passed a live validation (docs/CALIBRATION.md).
+    # The Spark profile is the contention model fitted on 2026-10-03; H100 returns once validated.
+    "v2": {
+        "released": "2026-10-03",
+        "data": {
+            "llmrouterbench": "fetch.LLMROUTERBENCH",
+            "traces": "traces.SOURCES",
+            "split_seed": 0,
+            "train_ratio": 0.5,
+        },
+        "rate_limit_snapshot": "2026-09-27",
+        "tier": "t1",
+        "load_basis": "total",
+        "slo_ttft": 30.0,
+        "duration_min": 30.0,
+        "seeds": [0, 1, 2, 3, 4],
+        "rhos": [0.3, 0.7, 1.0, 1.3],
+        "budgets": [0.1, 0.5],
+        "scenarios": [
+            {"hardware": "spark_v2", "arrivals": "poisson"},
+            {"hardware": "spark_v2", "arrivals": "burstgpt"},
+        ],
+    },
 }
 
 REFERENCE = ("oracle_unconstrained", "predictor_unconstrained", "fluid_ceiling")  # bounds, not routers

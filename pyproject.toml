@@ -1,6 +1,6 @@
 [project]
 name = "capbench"
-version = "0.2.0"
+version = "0.3.0"
 description = "Capacity-aware LLM routing benchmark: simulated serving limits over LLMRouterBench outcomes"
 readme = "README.md"
 license = "MIT"

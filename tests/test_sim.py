@@ -177,3 +177,25 @@ def test_track_a_knn_router_respects_limits_and_learns():
     w.Q[np.arange(len(w.t)), wk] = 1.0
     r = Simulator(BIG, Scenario(slo_ttft=1e6), 1e9).run(w, Recorder(router))
     assert (r.model == wk).mean() > 0.95
+
+
+def test_serial_prefill_queues_ttft_and_slows_decode():
+    from capbench.calibrate import simulate_closed_loop
+    base = dict(slots=64, max_queue=10**6, a=0.05, b=2.5e-4, t0=0.07, alpha=0.0)
+    legacy = SelfHosted("old", **base)
+    contended = SelfHosted("new", serial_prefill=True, kappa=1e-3, beta=1.0, **base)
+    ttft_old, tpot_old = simulate_closed_loop(legacy, 64, 1000, 100)
+    ttft_new, tpot_new = simulate_closed_loop(contended, 64, 1000, 100)
+    assert ttft_old == pytest.approx(0.05 + 0.25, rel=1e-6)          # every prefill runs in parallel
+    assert ttft_new == pytest.approx(0.05 + 32 * 0.25, rel=0.05)     # FIFO: the median waits for ~32
+    assert tpot_new > tpot_old
+    # one request alone: identical except for the context term
+    t1_old, _ = simulate_closed_loop(legacy, 1, 1000, 100)
+    t1_new, _ = simulate_closed_loop(contended, 1, 1000, 100)
+    assert t1_new == pytest.approx(t1_old, rel=1e-6)
+
+
+def test_saturated_capacity_capped_by_prefill_server():
+    s = SelfHosted("x", slots=64, a=0.0, b=1e-3, t0=1e-4, alpha=0.0, serial_prefill=True)
+    lam, _ = s.saturated(ptok=1000, ctok=10)
+    assert lam == pytest.approx(1.0, rel=1e-6)   # 1 / (b * ptok)

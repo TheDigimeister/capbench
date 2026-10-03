@@ -2,7 +2,10 @@
 API models behind token-bucket rate limits, and a spend cap over a trailing window.
 
 Self-hosted decode is processor sharing: every active sequence on a replica
-advances one token per tpot(n) seconds, n = occupied slots. Each replica keeps
+advances one token per tpot(n) seconds, n = occupied slots. With the v0.3
+contention model (SelfHosted.serial_prefill), prefills queue for one FIFO
+prefill server per replica, n counts decoding sequences only, and tpot also
+depends on their context and on whether the prefill server is busy. Each replica keeps
 a virtual clock V (tokens emitted per sequence so far); a sequence finishes
 when V reaches its start mark plus its output length, so rate changes on
 arrival/departure only require advancing V, not rescheduling every sequence.
@@ -51,10 +54,11 @@ class Result:
 
 
 class _Replica:
-    __slots__ = ("V", "last", "heap", "n", "version")
+    __slots__ = ("V", "last", "heap", "n", "version", "nd", "ctx", "pf_free", "pf_busy")
 
     def __init__(self):
         self.V, self.last, self.heap, self.n, self.version = 0.0, 0.0, [], 0, 0
+        self.nd, self.ctx, self.pf_free, self.pf_busy = 0, 0.0, 0.0, False
 
 
 class Simulator:
@@ -68,17 +72,23 @@ class Simulator:
         self._seq += 1
         heapq.heappush(self._ev, (t, self._seq, kind, args))
 
+    def _tpot(self, j, rep):
+        spec = self.pool[j]
+        if spec.serial_prefill:
+            return spec.tpot(rep.nd, rep.ctx, rep.pf_busy)
+        return spec.tpot(rep.n)
+
     def _advance(self, j, r, now):
         rep = self.reps[j][r]
-        if rep.n:
-            rep.V += (now - rep.last) / self.pool[j].tpot(rep.n)
+        if rep.heap:
+            rep.V += (now - rep.last) / self._tpot(j, rep)
         rep.last = now
 
     def _reschedule(self, j, r):
         rep = self.reps[j][r]
         rep.version += 1
         if rep.heap:
-            dt = max(rep.heap[0][0] - rep.V, 0.0) * self.pool[j].tpot(rep.n)
+            dt = max(rep.heap[0][0] - rep.V, 0.0) * self._tpot(j, rep)
             self._push(rep.last + dt, "decode", j, r, rep.version)
 
     def _bucket(self, j, now):
@@ -162,7 +172,16 @@ class Simulator:
             max_active[j] = max(max_active[j], sum(rep.n for rep in self.reps[j]))
             self._reschedule(j, r)
             model[i], start_t[i] = j, now
-            self._push(now + spec.prefill(w.ptok[i, j]), "prefill", j, r, i)
+            if not spec.serial_prefill:
+                self._push(now + spec.prefill(w.ptok[i, j]), "prefill", j, r, i)
+                return
+            rep = self.reps[j][r]
+            if not rep.pf_busy:
+                self._advance(j, r, now)
+                rep.pf_busy = True
+                self._reschedule(j, r)
+            rep.pf_free = max(rep.pf_free, now) + spec.b * w.ptok[i, j]
+            self._push(rep.pf_free, "prefill_done", j, r, i)
 
         def free_slot(j):
             return any(rep.n < pool[j].slots for rep in self.reps[j])
@@ -236,11 +255,21 @@ class Simulator:
                     model[i] = -1
                     outcome[i] = "abandoned"
                     router.on_event(Event("abandoned", i, j, now))
+            elif kind == "prefill_done":
+                j, r, i = args
+                rep = self.reps[j][r]
+                self._advance(j, r, now)
+                if now >= rep.pf_free - 1e-9:
+                    rep.pf_busy = False
+                self._reschedule(j, r)
+                self._push(now + pool[j].a, "prefill", j, r, i)
             elif kind == "prefill":
                 j, r, i = args
                 self._advance(j, r, now)
                 rep = self.reps[j][r]
                 heapq.heappush(rep.heap, (rep.V + max(w.ctok[i, j], 1.0), i))
+                rep.nd += 1
+                rep.ctx += w.ptok[i, j] + 0.5 * w.ctok[i, j]
                 self._reschedule(j, r)
                 self._first(i, j, now, w, ttft, outcome, deadline)
             elif kind == "first":
@@ -255,6 +284,8 @@ class Simulator:
                 while rep.heap and rep.heap[0][0] <= rep.V + 1e-6:
                     _, i = heapq.heappop(rep.heap)
                     rep.n -= 1
+                    rep.nd -= 1
+                    rep.ctx -= w.ptok[i, j] + 0.5 * w.ctok[i, j]
                     e2e[i] = now - w.t[i]
                     self.svc_ewma[j] += EWMA * ((now - start_t[i]) - self.svc_ewma[j])
                     router.on_event(Event("done", i, j, now, ttft[i]))

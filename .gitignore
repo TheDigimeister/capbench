@@ -13,3 +13,4 @@ outputs/archive/
 outputs/*.log
 outputs/grid*
 submissions/**/scratch/
+outputs/calibration/*.log

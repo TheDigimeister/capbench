@@ -1,9 +1,9 @@
 """Run routers through the simulator: either a released suite (the benchmark)
 or an ad-hoc grid (exploration).
 
-    python -m capbench.run --suite v1                                # all baselines, CapScore table
-    python -m capbench.run --suite v1 --router my_pkg.routers:make   # your router, plus baselines
-    python -m capbench.run --suite v1 --router my_pkg.routers:make --only-custom
+    python -m capbench.run --suite v2                                # all baselines, CapScore table
+    python -m capbench.run --suite v2 --router my_pkg.routers:make   # your router, plus baselines
+    python -m capbench.run --suite v2 --router my_pkg.routers:make --only-custom
     python -m capbench.run --seeds 0 --rhos 0.7 --n-arrivals 2000    # ad-hoc smoke run
 
 A custom router is `module:attr`, where attr is called as attr(ctx) with a
@@ -118,13 +118,13 @@ def run_grid(factories, *, seeds, rhos, budgets, tier, hardware, arrivals, load_
     return rows
 
 
-def run_suite(name, factories, references=True, scenarios=None):
+def run_suite(name, factories, references=True, scenarios=None, seeds=None):
     s = SUITES[name]
     rows = []
     for i, sc in enumerate(s["scenarios"]):
         if scenarios is not None and i not in scenarios:
             continue
-        rows += run_grid(factories, seeds=s["seeds"], rhos=s["rhos"], budgets=s["budgets"], tier=s["tier"],
+        rows += run_grid(factories, seeds=seeds or s["seeds"], rhos=s["rhos"], budgets=s["budgets"], tier=s["tier"],
                          hardware=sc["hardware"], arrivals=sc["arrivals"], load_basis=s["load_basis"],
                          slo=s["slo_ttft"], duration_min=s["duration_min"], references=references)
     df = pd.DataFrame(rows)
@@ -138,6 +138,7 @@ def main():
     ap.add_argument("--router", action="append", default=[], help="custom router factory, module:attr (repeatable)")
     ap.add_argument("--only-custom", action="store_true", help="skip the built-in baselines")
     ap.add_argument("--scenario", type=int, nargs="+", help="suite scenario indices to run (default: all)")
+    ap.add_argument("--suite-seeds", type=int, nargs="+", help="subset of the suite's seeds (for parallel runs)")
     ap.add_argument("--seeds", type=int, nargs="+", default=[0, 1, 2, 3, 4])
     ap.add_argument("--rhos", type=float, nargs="+", default=[0.3, 0.7, 1.0, 1.3])
     ap.add_argument("--budgets", type=float, nargs="+", default=[0.1, 0.5], help="budget_frac values")
@@ -160,10 +161,11 @@ def main():
     OUT.mkdir(exist_ok=True)
     if args.suite:
         tag = args.tag or args.suite
-        df = run_suite(args.suite, factories, references=not args.only_custom, scenarios=args.scenario)
+        df = run_suite(args.suite, factories, references=not args.only_custom, scenarios=args.scenario,
+                       seeds=args.suite_seeds)
         df.to_csv(OUT / f"{tag}.csv", index=False)
         print("wrote", f"outputs/{tag}.csv")
-        if not args.scenario:
+        if not args.scenario and not args.suite_seeds:
             print(cap_score(df).round(4).to_string())
         return
     rows = run_grid(factories, seeds=args.seeds, rhos=args.rhos, budgets=args.budgets, tier=args.tier,

@@ -16,9 +16,17 @@ Three reference rows bracket the scores, and none of them is a router:
 | `predictor_unconstrained` | The Track B predictor's argmax, with no capacity or budget |
 | `fluid_ceiling` | An LP over the whole trace with true quality and capacity, budget and SLO relaxations. It ignores queueing and bursts, so it is approximate rather than a strict bound |
 
-## Suite v1 (released 2026-10-03)
+## Suites
 
-Defined in `capbench/suite.py`. A released suite is never edited: changes go into a new version.
+Both suites are defined in `capbench/suite.py`. A released suite is never edited: changes go into a new version.
+
+### Suite v2 (current, released 2026-10-03)
+
+Suite v2 is suite v1 restricted to hardware whose simulator profile passed a live validation. It currently has one: the DGX Spark profile `spark_v2`, with the contention model fitted to vLLM (see [CALIBRATION.md](CALIBRATION.md)). Scenarios: `spark_v2` × {Poisson, BurstGPT}. Every other knob is as in v1. The H100 returns once it has been validated the same way.
+
+### Suite v1 (released 2026-10-03; provisional)
+
+Suite v1 uses unvalidated self-hosted profiles that overstate capacity (see [CALIBRATION.md](CALIBRATION.md)). It is kept for reproducibility.
 
 | Knob | Value |
 | --- | --- |
@@ -45,7 +53,7 @@ Defined in `capbench/suite.py`. A released suite is never edited: changes go int
 
 ## Simulator
 
-`capbench/sim.py` is a discrete-event simulator. Self-hosted models use processor-sharing decode with `tpot(n) = t0·(1 + α·n/slots)`, prefill `a + b·ptok`, a model-level FIFO queue, and abandonment at the deadline. API models use token buckets for RPM and TPM, lognormal TTFT, and hidden reasoning tokens before the first visible token. Budget is enforced as a windowed spend refusal. Refusals (429, queue full, budget) give the router up to 3 attempts with a 0.2 s retry delay.
+`capbench/sim.py` is a discrete-event simulator. Self-hosted models use processor-sharing decode with `tpot(n) = t0·(1 + α·n/slots)`, a model-level FIFO queue, and abandonment at the deadline. With the contention model used by validated profiles, each replica also has a FIFO prefill server (`b·ptok` per request, plus `a` of latency). Decode then slows by `(1 + β)` while prefill runs, and by `κ` per 1k context tokens held. API models use token buckets for RPM and TPM, lognormal TTFT, and hidden reasoning tokens before the first visible token. Budget is enforced as a windowed spend refusal. Refusals (429, queue full, budget) give the router up to 3 attempts with a 0.2 s retry delay.
 
 ### Calibration status
 
@@ -56,10 +64,11 @@ Defined in `capbench/suite.py`. A released suite is never edited: changes go int
 | API latency: deepseek-v3-0324 | Artificial Analysis, DeepInfra (FP4) endpoint | Sourced (2026-10-03) |
 | API latency: gpt-5-chat | None published | **Placeholder**: 0.6 s TTFT, 100 tok/s |
 | API TTFT spread (lognormal σ = 0.5) | None published | **Assumption** |
-| Self-hosted H100 profile | NVIDIA NIM Llama-3.1-8B benchmarks | Sourced. The fit reproduces ITL at concurrency 25 and 50 |
-| Self-hosted Spark profile | LMSYS DGX Spark SGLang numbers | Sourced. A live vLLM fit (`spark_vllm`, 2026-10-03) failed validation; see CALIBRATION.md |
+| Self-hosted H100 profile (v1 only) | NVIDIA NIM Llama-3.1-8B benchmarks | Sourced, v1 model, **not validated**; likely overstates capacity like the v1 Spark profile |
+| Self-hosted Spark profile, v1 (`spark`) | LMSYS DGX Spark SGLang numbers | Sourced, v1 model, not validated |
+| Self-hosted Spark profile, v2 (`spark_v2`) | Fit to vLLM on a DGX Spark, Qwen3-8B BF16 (2026-10-03) | **Validated**: TTFT p95 within 6.1%, p99 within 9.0% at ρ = 0.7 on BurstGPT. β is weakly identified |
 | Slots (64) and queue cap (256) per replica | Chosen | **Assumption** |
 | Self-hosted $/replica-hour ($2) | None | **Assumption**. It is reported only; it never enters the budget or the score |
 | Per-call API prices | LLMRouterBench recorded cost | Sourced |
 
-**Validation against live vLLM failed** (2026-10-03, DGX Spark, Qwen3-8B). The simulator overstates self-hosted capacity by about 1.8× at realistic prompt lengths, because it does not model prefill contention or the effect of context length on decode. Suite v1 scores are therefore provisional. See [CALIBRATION.md](CALIBRATION.md); fixing this is the main item for suite v2. The models gpt-5, gpt-5-chat and deepseek-v3-0324 have since been retired or moved by their providers, so the numbers above describe the 2025–26 APIs that LLMRouterBench recorded.
+**Validation:** the v1 profiles overstate self-hosted capacity by about 1.8× at realistic prompt lengths. The contention model fitted for suite v2 passes a live replay against vLLM on the Spark. Details and raw data are in [CALIBRATION.md](CALIBRATION.md). The models gpt-5, gpt-5-chat and deepseek-v3-0324 have since been retired or moved by their providers, so the numbers above describe the 2025–26 APIs that LLMRouterBench recorded.

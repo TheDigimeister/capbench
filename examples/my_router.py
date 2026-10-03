@@ -1,6 +1,6 @@
 """Minimal custom router: run it with
 
-    python -m capbench.run --suite v1 --router examples.my_router:make
+    python -m capbench.run --suite v2 --router examples.my_router:make
 
 `make(ctx)` receives a capbench.run.RouterContext and returns a Router.
 This one sends a query to the model with the highest predicted quality among

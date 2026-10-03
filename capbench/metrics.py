@@ -65,8 +65,9 @@ def fluid_ceiling(w, pool, budget_per_hour, slo, window=HOUR, max_n=10_000, seed
     decode_cap = np.full(m, np.inf)
     for j, p in enumerate(pool):
         if p.kind == "self":
-            tail = p.prefill(w.ptok[:, j].mean()) + w.ctok[:, j].mean() * p.tpot(p.slots)
-            decode_cap[j] = share * p.replicas * (H + tail) * p.slots / p.tpot(p.slots)
+            tpot = p.saturated(w.ptok[:, j].mean(), w.ctok[:, j].mean())[1]
+            tail = p.prefill(w.ptok[:, j].mean()) + w.ctok[:, j].mean() * tpot
+            decode_cap[j] = share * p.replicas * (H + tail) * p.slots / tpot
         else:
             req_cap[j] = share * p.rpm * (1 + H / 60)
             tok_cap[j] = share * p.tpm * (1 + H / 60)

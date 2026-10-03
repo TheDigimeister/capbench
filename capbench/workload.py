@@ -38,8 +38,7 @@ def self_hosted_throughput(b: Bench):
     mu = 0.0
     for j, p in enumerate(b.pool):
         if p.kind == "self":
-            svc = p.prefill(ptok) + b.ctok[b.train, j].mean() * p.tpot(p.slots)
-            mu += p.replicas * p.slots / svc
+            mu += p.replicas * p.saturated(ptok, b.ctok[b.train, j].mean())[0]
     return mu
 
 

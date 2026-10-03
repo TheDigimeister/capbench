@@ -1,6 +1,6 @@
 # Suite v1 baseline results
 
-These results cover 10 baselines on 4 scenarios × 4 load levels × 2 budgets × 5 seeds, for 160 cells per router (`outputs/v1_s*.csv`, plotted in `outputs/v1.png`). The simulator is not yet validated against live serving (see [PROTOCOL.md](PROTOCOL.md#calibration-status)), so read the absolute numbers as provisional. The rankings are more robust than the absolute values.
+These results cover 10 baselines on 4 scenarios × 4 load levels × 2 budgets × 5 seeds, for 160 cells per router (`outputs/v1_s*.csv`, plotted in `outputs/v1.png`). **Caveat:** a live validation (see [CALIBRATION.md](CALIBRATION.md)) found that the simulator overstates self-hosted capacity by about 1.8×. These results are provisional: at a given ρ, real self-hosted queues would be longer, which mostly penalises routers that rely on self-hosted capacity.
 
 ## CapScore by scenario
 

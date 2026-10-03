@@ -53,6 +53,10 @@ HARDWARE = {
     # 20.5 tok/s at batch 1 and 368 tok/s total at batch 32 (lmsys.org blog, 2025-10-13).
     # Stands in for the vLLM calibration run on the Spark itself.
     "spark": dict(a=0.02, b=1.25e-4, t0=0.049, alpha=1.55),
+    # DGX Spark, Qwen3-8B BF16, vLLM (nvcr.io/nvidia/vllm:26.07), max-num-seqs 64, no prefix
+    # caching: measured with `capbench.calibrate fit` on 2026-10-03. Median TPOT 71.3 / 67.7 /
+    # 71.5 / 85.5 / 90.0 / 95.4 ms at concurrency 1 / 4 / 16 / 32 / 48 / 64.
+    "spark_vllm": dict(a=0.1347, b=2.63e-4, t0=0.0713, alpha=0.4),
 }
 
 # ---------------------------------------------------------------- API tiers

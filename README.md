@@ -4,7 +4,7 @@ Most LLM routing benchmarks score a router as if every model were always availab
 
 The primary score is **CapScore**: accuracy after SLO misses, averaged over a fixed, versioned suite of load, budget and hardware scenarios. See [docs/PROTOCOL.md](docs/PROTOCOL.md).
 
-> **Status: v0.1, suite v1.** The simulator is calibrated from published benchmarks but has **not yet been validated against a live vLLM server**, and one API latency (gpt-5-chat) is a placeholder. See [calibration status](docs/PROTOCOL.md#calibration-status).
+> **Status: v0.2, suite v1. Simulator validation failed; scores are provisional.** A live check on a DGX Spark running vLLM found that the simulator overstates self-hosted capacity by about 1.8× at realistic prompt lengths: it does not model prefill contention or context-dependent decode. Rankings may change once this is fixed in suite v2. See [docs/CALIBRATION.md](docs/CALIBRATION.md). One API latency (gpt-5-chat) is still a placeholder.
 
 ## Leaderboard (suite v1)
 

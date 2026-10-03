@@ -57,9 +57,9 @@ Defined in `capbench/suite.py`. A released suite is never edited: changes go int
 | API latency: gpt-5-chat | None published | **Placeholder**: 0.6 s TTFT, 100 tok/s |
 | API TTFT spread (lognormal σ = 0.5) | None published | **Assumption** |
 | Self-hosted H100 profile | NVIDIA NIM Llama-3.1-8B benchmarks | Sourced. The fit reproduces ITL at concurrency 25 and 50 |
-| Self-hosted Spark profile | LMSYS DGX Spark SGLang numbers | Sourced; not yet re-fit with `capbench.calibrate` |
+| Self-hosted Spark profile | LMSYS DGX Spark SGLang numbers | Sourced. A live vLLM fit (`spark_vllm`, 2026-10-03) failed validation; see CALIBRATION.md |
 | Slots (64) and queue cap (256) per replica | Chosen | **Assumption** |
 | Self-hosted $/replica-hour ($2) | None | **Assumption**. It is reported only; it never enters the budget or the score |
 | Per-call API prices | LLMRouterBench recorded cost | Sourced |
 
-The simulator has **not yet been validated against a live serving stack**. `capbench.calibrate validate` replays a BurstGPT slice through vLLM and through the simulator and compares p50/p95/p99 TTFT, targeting p95 within about 15%. That run is the main open item for v2. The models gpt-5, gpt-5-chat and deepseek-v3-0324 have since been retired or moved by their providers, so the numbers above describe the 2025–26 APIs that LLMRouterBench recorded.
+**Validation against live vLLM failed** (2026-10-03, DGX Spark, Qwen3-8B). The simulator overstates self-hosted capacity by about 1.8× at realistic prompt lengths, because it does not model prefill contention or the effect of context length on decode. Suite v1 scores are therefore provisional. See [CALIBRATION.md](CALIBRATION.md); fixing this is the main item for suite v2. The models gpt-5, gpt-5-chat and deepseek-v3-0324 have since been retired or moved by their providers, so the numbers above describe the 2025–26 APIs that LLMRouterBench recorded.

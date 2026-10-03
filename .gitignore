@@ -1,0 +1,15 @@
+.venv/
+__pycache__/
+.pytest_cache/
+*.egg-info/
+# LLMRouterBench results (symlink or directory; download separately) and derived caches
+data
+cache/
+# downloaded arrival traces
+traces/raw/
+outputs/smoke*
+# pre-v1 and exploratory results stay local
+outputs/archive/
+outputs/*.log
+outputs/grid*
+submissions/**/scratch/
